@@ -14,9 +14,8 @@ from networks.vnet_roi import VNet_roi
 from networks.vnet import VNet
 from networks.vnet_ins_seg import VNet_singleTooth
 
-
 parser = argparse.ArgumentParser()
-parser.add_argument('--gpu', type=str,  default='0, 1, 2, 3', help='GPU to use')
+parser.add_argument('--gpu', type=str, default='0, 1, 2, 3', help='GPU to use')
 FLAGS = parser.parse_args()
 
 os.environ['CUDA_VISIBLE_DEVICES'] = FLAGS.gpu
@@ -25,7 +24,8 @@ num_classes = 2
 
 with open('../file.list', 'r') as f:
     image_list = f.readlines()
-image_list = [item.replace('\n','') for item in image_list]
+image_list = [item.replace('\n', '') for item in image_list]
+
 
 def read_data(data_patch):
     src_data_file = os.path.join(data_patch)
@@ -33,13 +33,13 @@ def read_data(data_patch):
     image = src_data_vol.get_data()
     w, h, d = image.shape
     spacing = src_data_vol.header['pixdim'][1:4]
-    image = label_rescale(image, w*(spacing[0]/0.2), h*(spacing[0]/0.2), d*(spacing[0]/0.2), 'nearest')
+    image = label_rescale(image, w * (spacing[0] / 0.2), h * (spacing[0] / 0.2), d * (spacing[0] / 0.2), 'nearest')
     if image[image > -1000].mean() < -100:
         intensity_scale = (-60 + 1000) / (image[image > -1000].mean() + 1000)
         image = (image + 1000) * intensity_scale - 1000
     image[image < 500] = 500
     image[image > 2500] = 2500
-    image = (image - 500)/(2500 - 500)
+    image = (image - 500) / (2500 - 500)
     low_bound = np.percentile(image, 5)
     up_bound = np.percentile(image, 99.9)
     return image, low_bound, up_bound, w, h, d
@@ -59,7 +59,7 @@ def load_model():
     net_cnt.load_state_dict(torch.load(save_mode_path))
     print("init weight from {}".format(save_mode_path))
     net_cnt.eval()
-    
+
     # load model of skl
     save_mode_path = os.path.join('../iter_skl.pth')
     net_skl.load_state_dict(torch.load(save_mode_path))
@@ -83,13 +83,14 @@ def label_rescale(image_label, w_ori, h_ori, z_ori, flag):
         image_label = torch.from_numpy(image_label).cuda(0)
         for label_id in range(len(teeth_ids)):
             image_label_bn = (image_label == teeth_ids[label_id]).float()
-            #image_label_bn = torch.from_numpy(image_label_bn.astype(float))
+            # image_label_bn = torch.from_numpy(image_label_bn.astype(float))
             image_label_bn = image_label_bn[None, None, :, :, :]
-            image_label_bn = torch.nn.functional.interpolate(image_label_bn, size=(w_ori, h_ori, z_ori), mode='trilinear')
+            image_label_bn = torch.nn.functional.interpolate(image_label_bn, size=(w_ori, h_ori, z_ori),
+                                                             mode='trilinear')
             image_label_bn = image_label_bn[0, 0, :, :, :]
             image_label_ori[image_label_bn > 0.5] = teeth_ids[label_id]
         image_label = image_label_ori.cpu().data.numpy()
-    
+
     if flag == 'nearest':
         image_label = torch.from_numpy(image_label).cuda(0)
         image_label = image_label[None, None, :, :, :].float()
@@ -98,21 +99,19 @@ def label_rescale(image_label, w_ori, h_ori, z_ori, flag):
     return image_label
 
 
-
-
 def img_crop(image_bbox):
     image_bbox = morphology.remove_small_objects(image_bbox.astype(bool), 2500, connectivity=3).astype(int)
     if image_bbox.sum() > 0:
-        #if None:
-        x_min = np.nonzero(image_bbox)[0].min()-32
-        x_max = np.nonzero(image_bbox)[0].max()+32
-        
-        y_min = np.nonzero(image_bbox)[1].min()-16
-        y_max = np.nonzero(image_bbox)[1].max()+16
+        # if None:
+        x_min = np.nonzero(image_bbox)[0].min() - 32
+        x_max = np.nonzero(image_bbox)[0].max() + 32
 
-        z_min = np.nonzero(image_bbox)[2].min()-16
-        z_max = np.nonzero(image_bbox)[2].max()+16
-            
+        y_min = np.nonzero(image_bbox)[1].min() - 16
+        y_max = np.nonzero(image_bbox)[1].max() + 16
+
+        z_min = np.nonzero(image_bbox)[2].min() - 16
+        z_max = np.nonzero(image_bbox)[2].max() + 16
+
         if x_min < 0:
             x_min = 0
         if y_min < 0:
@@ -126,15 +125,14 @@ def img_crop(image_bbox):
         if z_max > image_bbox.shape[2]:
             z_max = image_bbox.shape[2]
     if image_bbox.sum() == 0:
-        x_min, x_max, y_min, y_max, z_min, z_max = -1, image_bbox.shape[0], 0, image_bbox.shape[1], 0, image_bbox.shape[2]
+        x_min, x_max, y_min, y_max, z_min, z_max = -1, image_bbox.shape[0], 0, image_bbox.shape[1], 0, image_bbox.shape[
+            2]
     return x_min, x_max, y_min, y_max, z_min, z_max
-
-
 
 
 def inference(image, net_roi, net_cnt, net_skl, ins_net, low_bound, up_bound, w_o, h_o, d_o):
     w, h, d = image.shape
-    
+
     # roi binary segmentation parameters, the input spacing is 0.4 mm
     print('---run the roi binary segmentation.')
     stride_xy = 224
@@ -142,23 +140,23 @@ def inference(image, net_roi, net_cnt, net_skl, ins_net, low_bound, up_bound, w_
     patch_size_roi_stage = (256, 256, 256)
     label_roi = roi_detection(net_roi, image[0:w:2, 0:h:2, 0:d:2], stride_xy, stride_z, patch_size_roi_stage)
     label_roi = label_rescale(label_roi, w, h, d, 'trilinear')
-    
+
     # crop image
     x_min, x_max, y_min, y_max, z_min, z_max = img_crop(label_roi)
-    if x_min == -1: # non-foreground label
+    if x_min == -1:  # non-foreground label
         whole_label = np.zeros((w, h, d))
         return whole_label
     image = image[x_min:x_max, y_min:y_max, z_min:z_max]
     w2, h2, d2 = image.shape
-    
+
     # 1st stage parameters, the input spacing is 0.4 mm
     print('---run the 1st stege network.')
     stride_xy = 64
     stride_z = 64
     patch_size_1st_stage = (128, 128, 128)
-    ins_skl_map = cnt_skl_detection(net_cnt, net_skl, image[0:w:2, 0:h:2, 0:d:2], stride_xy, stride_z, patch_size_1st_stage)
+    ins_skl_map, centroids = cnt_skl_detection(net_cnt, net_skl, image[0:w:2, 0:h:2, 0:d:2], stride_xy, stride_z,
+                                    patch_size_1st_stage)
     ins_skl_map = label_rescale(ins_skl_map, w, h, d, 'nearest')
-
 
     # 2nd stage parameters, the input spacing is 0.2 mm
     print('---run the 2nd stege network.')
@@ -183,6 +181,9 @@ if __name__ == '__main__':
         path_pos_2 = [sub_data_path.start() for sub_data_path in re.finditer('/', image_list[data_id])][-1]
         path_pos_3 = [sub_data_path.start() for sub_data_path in re.finditer('.nii.gz', image_list[data_id])][-1]
 
-        nib.save(nib.Nifti1Image(tooth_label.astype(np.float32), np.eye(4)), "../" + image_list[data_id][(path_pos_0+1):path_pos_1] + '_' + image_list[data_id][(path_pos_1+1):path_pos_2] + '_' + image_list[data_id][(path_pos_2+1):path_pos_3] + ".nii.gz")
+        nib.save(nib.Nifti1Image(tooth_label.astype(np.float32), np.eye(4)),
+                 "../" + image_list[data_id][(path_pos_0 + 1):path_pos_1] + '_' + image_list[data_id][
+                                                                                  (path_pos_1 + 1):path_pos_2] + '_' +
+                 image_list[data_id][(path_pos_2 + 1):path_pos_3] + ".nii.gz")
 
     print(metric)

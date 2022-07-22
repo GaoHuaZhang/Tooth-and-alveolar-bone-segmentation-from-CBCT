@@ -237,4 +237,5 @@ class VNet_roi(nn.Module):
         if turnoff_drop:
             self.has_dropout = has_dropout
         return out
-
+model=VNet_roi()
+print(model)

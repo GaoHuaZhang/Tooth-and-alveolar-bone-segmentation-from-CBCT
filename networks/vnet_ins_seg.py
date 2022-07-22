@@ -4,13 +4,14 @@ from torch import nn
 import numpy as np
 import torch.nn.functional as F
 
+
 class ConvBlock(nn.Module):
     def __init__(self, n_stages, n_filters_in, n_filters_out, normalization='none'):
         super(ConvBlock, self).__init__()
 
         ops = []
         for i in range(n_stages):
-            if i==0:
+            if i == 0:
                 input_channel = n_filters_in
             else:
                 input_channel = n_filters_out
@@ -54,7 +55,7 @@ class ResidualConvBlock(nn.Module):
             elif normalization != 'none':
                 assert False
 
-            if i != n_stages-1:
+            if i != n_stages - 1:
                 ops.append(nn.ReLU(inplace=True))
 
         self.conv = nn.Sequential(*ops)
@@ -125,7 +126,7 @@ class Upsampling(nn.Module):
         super(Upsampling, self).__init__()
 
         ops = []
-        ops.append(nn.Upsample(scale_factor=stride, mode='trilinear',align_corners=False))
+        ops.append(nn.Upsample(scale_factor=stride, mode='trilinear', align_corners=False))
         ops.append(nn.Conv3d(n_filters_in, n_filters_out, kernel_size=3, padding=1))
         if normalization == 'batchnorm':
             ops.append(nn.BatchNorm3d(n_filters_out, track_running_stats=False))
@@ -142,6 +143,7 @@ class Upsampling(nn.Module):
     def forward(self, x):
         x = self.conv(x)
         return x
+
 
 class VNet_singleTooth(nn.Module):
     def __init__(self, n_channels=2, n_classes=2, n_filters=32, normalization='none', has_dropout=False):
@@ -172,11 +174,10 @@ class VNet_singleTooth(nn.Module):
         self.block_eight = ConvBlock(2, n_filters * 2, n_filters * 2, normalization=normalization)
         self.block_eight_up = UpsamplingDeconvBlock(n_filters * 2, n_filters, normalization=normalization)
         self.out_conv_seg = nn.Conv3d(n_filters, 2, 3, padding=1)
-        
+
         self.block_eight_bd = ConvBlock(2, n_filters * 2, n_filters * 2, normalization=normalization)
         self.block_eight_up_bd = UpsamplingDeconvBlock(n_filters * 2, n_filters, normalization=normalization)
         self.out_conv_bd = nn.Conv3d(n_filters, 2, 3, padding=1)
-        
 
     def encoder(self, input):
         x1 = self.block_one(input)
@@ -193,17 +194,17 @@ class VNet_singleTooth(nn.Module):
 
         x5 = self.block_five(x4_dw)
         # x5 = F.dropout3d(x5, p=0.5, training=True)
-        #if self.has_dropout:
+        # if self.has_dropout:
         #    x5 = self.dropout(x5)
         res = [x2, x3, x4, x5]
         return res
-    
+
     def decoder(self, features):
         x2 = features[0]
         x3 = features[1]
         x4 = features[2]
         x5 = features[3]
-        #x5 = features[4]
+        # x5 = features[4]
 
         x5_up = self.block_five_up(x5)
         x5_up = x5_up + x4
@@ -215,10 +216,10 @@ class VNet_singleTooth(nn.Module):
         x7 = self.block_seven(x6_up)
         x7_up = self.block_seven_up(x7)
         x7_up = x7_up + x2
-        
+
         x8 = self.block_eight(x7_up)
         x8_up = self.block_eight_up(x8)
-        out_seg = self.out_conv_seg(x8_up)   
+        out_seg = self.out_conv_seg(x8_up)
         return out_seg
 
     def decoder_bd(self, features):
@@ -226,7 +227,7 @@ class VNet_singleTooth(nn.Module):
         x3 = features[1]
         x4 = features[2]
         x5 = features[3]
-        #x5 = features[4]
+        # x5 = features[4]
 
         x5_up = self.block_five_up(x5)
         x5_up = x5_up + x4
@@ -238,10 +239,10 @@ class VNet_singleTooth(nn.Module):
         x7 = self.block_seven(x6_up)
         x7_up = self.block_seven_up(x7)
         x7_up = x7_up + x2
-        
+
         x8 = self.block_eight(x7_up)
         x8_up = self.block_eight_up(x8)
-        out_bd= self.out_conv_seg(x8_up)   
+        out_bd = self.out_conv_seg(x8_up)
         return out_bd
 
     def decoder_kp(self, features):
@@ -249,7 +250,7 @@ class VNet_singleTooth(nn.Module):
         x3 = features[1]
         x4 = features[2]
         x5 = features[3]
-        #x5 = features[4]
+        # x5 = features[4]
 
         x5_up = self.block_five_up(x5)
         x5_up = x5_up + x4
@@ -261,19 +262,17 @@ class VNet_singleTooth(nn.Module):
         x7 = self.block_seven(x6_up)
         x7_up = self.block_seven_up(x7)
         x7_up = x7_up + x2
-        
+
         x8 = self.block_eight(x7_up)
         x8_up = self.block_eight_up(x8)
-        out_kp= self.out_conv_seg(x8_up)   
+        out_kp = self.out_conv_seg(x8_up)
         return out_kp
 
-        
     def forward(self, ori, skl):
-        ori = torch.reshape(ori, (ori.shape[0]*ori.shape[1], 1, ori.shape[2], ori.shape[3], ori.shape[4]))
-        skl = torch.reshape(skl, (skl.shape[0]*skl.shape[1], 1, skl.shape[2], skl.shape[3], skl.shape[4]))
+        ori = torch.reshape(ori, (ori.shape[0] * ori.shape[1], 1, ori.shape[2], ori.shape[3], ori.shape[4]))
+        skl = torch.reshape(skl, (skl.shape[0] * skl.shape[1], 1, skl.shape[2], skl.shape[3], skl.shape[4]))
         features = self.encoder(torch.cat((ori, skl), 1))
         seg = self.decoder(features)
         seg_bd = self.decoder_bd(features)
         seg_kp = self.decoder_kp(features)
-        return seg, seg_fcn
-        
+        return seg, seg_bd, seg_kp
